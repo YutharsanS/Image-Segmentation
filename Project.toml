@@ -6,7 +6,11 @@ authors = ["YutharsanS <yutharsansivabalan@gmail.com>"]
 [deps]
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
+PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 
 [compat]
 FileIO = "1.20.0"
 Images = "0.26.2"
+PlutoUI = "0.7.83"
+Revise = "3.17.3"
