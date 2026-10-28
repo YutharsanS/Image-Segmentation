@@ -404,7 +404,95 @@ let
 end
 
 # ╔═╡ f7349d08-ccb7-4791-86c9-664363b19966
+md"""
+# Countour Tracking
+"""
 
+# ╔═╡ 6c8a2a0c-78a0-4dcb-99e9-d423b10466e0
+const DIRS = (CartesianIndex(-1, 1),  CartesianIndex(0, 1),   # 0 NE, 1 E
+              CartesianIndex(1, 1),   CartesianIndex(1, 0),   # 2 SE, 3 S
+              CartesianIndex(1, -1),  CartesianIndex(0, -1),  # 4 SW, 5 W
+              CartesianIndex(-1, -1), CartesianIndex(-1, 0))  # 6 NW, 7 N
+
+# ╔═╡ 61073048-6b9a-4669-837e-9b396f23c850
+function next_pixel(obj, cur, n)
+	m = mod(n - 2, 8)
+	for _ in 1:8
+		q = cur + DIRS[m + 1]
+		checkbounds(Bool, obj, q) && obj[q] && return q, m
+		m = mod(m + 1, 8)
+	end
+	return nothing # isolated pixel
+end
+
+# ╔═╡ e320ad53-42a2-4459-83cd-9ff968117bba
+function trace_boundary(obj)
+	start = findfirst(obj)
+	start === nothing && throw(ArgumentError("mask is empty"))
+	path = [start]
+	cur, n, second = start, 1, nothing
+
+	for _ in 1: 4*length(obj)
+		nxt = next_pixel(obj, cur, n)
+		nxt === nothing && return path
+		q, m = nxt
+
+		cur == start && q == second && (pop!(path); return path)
+		second === nothing && (second = q)
+
+		push!(path, q)
+		cur, n = q, m
+	end
+	error("tracing did not terminate")
+end
+
+# ╔═╡ 0da36c94-d422-4584-bddc-5db1d5019ce0
+let
+sq = falses(5, 5); sq[2:4, 2:4] .= true
+next_pixel(sq, CartesianIndex(2, 2), 1)    # expect (CartesianIndex(2, 3), 1): one step east
+trace_boundary(sq)
+end
+
+# ╔═╡ 83a21a74-9b67-4e53-9be0-d0d87d5c36ff
+lobes = Bool[0 0 0 0 0 0 0 0 0 0
+             0 0 0 0 1 1 1 0 0 0
+             0 0 0 0 1 1 1 0 0 0
+             0 0 0 0 1 1 1 0 0 0
+             0 0 0 1 1 1 1 0 0 0
+             0 0 1 0 0 0 0 0 0 0
+             0 0 1 1 1 1 0 0 0 0
+             0 0 1 1 1 1 0 0 0 0
+             0 0 1 1 1 1 0 0 0 0
+             0 0 0 1 1 1 0 0 0 0
+             0 0 0 0 0 0 0 0 0 0]
+
+# ╔═╡ a0696c6c-40bd-4777-ac96-875a8a39632c
+let p = trace_boundary(lobes)
+	(length(p), unique(p))
+end
+
+# ╔═╡ 0b8edfb8-2a71-499d-95eb-26e58162ac5c
+begin
+	const N4 = (CartesianIndex(-1, 0), CartesianIndex(1, 0), CartesianIndex(0, -1), CartesianIndex(0, 1))
+	# a boundary pixel has at least one background (or off-image) 4-neighbour
+	on_edge(obj, p) = any(d -> !checkbounds(Bool, obj, p + d) || !obj[p + d], N4)
+	# the path is closed: its last pixel is next to its first
+	is_closed(path) = maximum(abs, Tuple(path[end] - path[1])) <= 1
+end
+
+# ╔═╡ eefab908-0593-44f2-a63f-d0b48a930515
+let path = trace_boundary(obj)
+	(length = length(path), all_on_edge = all(p -> on_edge(obj, p), path), closed = is_closed(path))
+end
+
+# ╔═╡ 0d458d93-8e0a-4a36-9d19-5712d6837b0c
+let out = RGB.(g), path = trace_boundary(obj)
+	for p in path
+		out[p] = RGB(1, 0, 0)
+	end
+	out[first(path)] = RGB(0, 1, 0)          # start pixel in green
+	out
+end
 
 # ╔═╡ Cell order:
 # ╠═5dafaf16-ce2a-11f1-9500-1729d89884be
@@ -469,3 +557,12 @@ end
 # ╠═62587e2f-e4f3-46ae-b194-a6d3fca31266
 # ╠═62dc8977-4643-4316-a4fb-b3042acc0eb2
 # ╠═f7349d08-ccb7-4791-86c9-664363b19966
+# ╠═6c8a2a0c-78a0-4dcb-99e9-d423b10466e0
+# ╠═61073048-6b9a-4669-837e-9b396f23c850
+# ╠═e320ad53-42a2-4459-83cd-9ff968117bba
+# ╠═0da36c94-d422-4584-bddc-5db1d5019ce0
+# ╠═83a21a74-9b67-4e53-9be0-d0d87d5c36ff
+# ╠═a0696c6c-40bd-4777-ac96-875a8a39632c
+# ╠═0b8edfb8-2a71-499d-95eb-26e58162ac5c
+# ╠═eefab908-0593-44f2-a63f-d0b48a930515
+# ╠═0d458d93-8e0a-4a36-9d19-5712d6837b0c
