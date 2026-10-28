@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "26ae23d63d93cc2a70c0b60311a00d4e3a109b8a"
+project_hash = "6206df46f204be7ca98bb1e477d52afb960fa2a4"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1067,7 +1067,7 @@ uuid = "856f044c-d86e-5d09-b602-aeab76dc8ba7"
 version = "2025.2.0+0"
 
 [[deps.MachineVisionPipeline]]
-deps = ["FileIO", "Images", "Pluto", "PlutoUI", "Random", "Revise", "Statistics"]
+deps = ["FileIO", "Images", "Plots", "Pluto", "PlutoUI", "Random", "Revise", "Statistics"]
 path = "."
 uuid = "0938d046-9847-4421-b1d6-7ae7e1b4a6eb"
 version = "0.1.0"
