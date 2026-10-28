@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v1.0.3
+# v1.0.4
 
 using Markdown
 using InteractiveUtils
@@ -43,6 +43,14 @@ begin
 	imgs = load.(joinpath.(data_dir, image_files))
 	mosaicview(imgs...; nrow=1)
 end
+
+# ╔═╡ 75e4bccb-2f58-4072-8f31-ac6fcdbdd7bd
+md"""
+# Filtering - Median Filtering
+"""
+
+# ╔═╡ 55c736b6-4c8f-4b2f-9f03-e8ea13069ee1
+K = 15 # Kernel size (global)
 
 # ╔═╡ 7150a515-01ea-4d3a-a14c-fbfc203a2796
 img = load(joinpath(data_dir, selected_file))
@@ -113,7 +121,7 @@ md"""
 """
 
 # ╔═╡ 8e5abe7f-546f-4550-809d-a836aab6c248
-@time begin 
+@time let
 	labels = ["Original", "Gaussian", "Mean", "Median"]
 	filtered = (g, gaussian_filter(g, σ), mean_filter(g, k), median_filter(g, k))
 	Gray.(clamp01.(mosaicview(zoom.(crop.(filtered, cy, cx))...; nrow = 1, npad = 4, fillvalue = 1)))
@@ -244,10 +252,114 @@ psnr_values_controlled
 Gray.(clamp01.(mosaicview([zoom(out[6:18, 14:110], 4) for out in last.(results)]...;
                           ncol = 1, npad = 2, fillvalue = 1)))
 
+# ╔═╡ 59dca33c-874a-4c96-9aff-5fc1f1c447a7
+md"""
+# Segementation
+"""
+
+# ╔═╡ e119d917-8156-4654-b265-f905622d18fa
+mosaicview(Gray.(g))
+
+# ╔═╡ 6d88a013-dd93-4209-99af-e64c83a4c83a
+md"""
+- σseg $(@bind σseg Slider(0.5:0.1:4.0, default=1.0, show_value=true))
+- kseg $(@bind kseg Slider(3:2:21, default=5, show_value=true))
+"""
+
+# ╔═╡ 458121a4-af60-4a29-9aa2-cff024749d8b
+filtered = median_filter(g, kseg)
+
+# ╔═╡ d3f302d4-6569-4835-8457-3ee20c5d3d7c
+let
+	p1 = histogram(vec(g), bins = 100, yscale = :log10, title = "raw", legend = false)
+	p2 = histogram(vec(filtered), bins = 100, yscale = :log10, title = "median $(kseg)×$(kseg)", legend = false)
+	plot(p1, p2, layout = (1, 2), size = (800, 300))
+end
+
+# ╔═╡ ae2907c2-806a-4940-8f58-72c44316c1db
+function intermeans_threshold(f; T0 = mean(f), ϵ= 1e-4, maxiter=100)
+	T = T0
+	history = [T]
+	for _ in 1:maxiter
+		μ1 = mean(f[f .≤ T])
+		μ2 = mean(f[f .> T])
+		T_new = (μ1 + μ2) / 2 
+
+		if abs(T_new - T) < ϵ
+			break
+		end
+		T = T_new
+		push!(history, T)
+	end
+	return T, history
+end
+
+# ╔═╡ cfa29cf0-7962-477e-a24b-0f579dd91acd
+T, hist_T = intermeans_threshold(filtered)
+
+# ╔═╡ 1e5d0cc0-6b47-40a2-9059-07df3e5c1da2
+let
+	hist = histogram(vec(filtered); bins=100, label="median filter K = $kseg", alpha=0.5, xlabel="Intensity", ylabel="Pixel count", title="Intensity histogram")
+	histogram!(hist, vec(g); label="original", alpha=0.5)
+	# histogram!(hist, vec(gaussian_filter(g, σseg)); label="gaussian", alpha=0.5)
+	vline!([T], lw=2, label="Threshold")
+	
+end
+
+# ╔═╡ a8781fa6-8059-4f07-bc5a-82fe3625e376
+# convergence over multiple values
+[T0 => round.(intermeans_threshold(filtered; T0=T0)[2], digits=4) for T0 in (0.1, 0.5, 0.9)]
+
+# ╔═╡ 26b3d671-8171-43dc-9463-b1aac2eb63ab
+# if  more than half the boarder pixels are white, then the background is white : assumption
+# we assume the object doesn't touch the boarders and each image only features one object
+
+begin
+	mask_seg = filtered .> T
+	boarders_seg = vcat(mask_seg[1, :], mask_seg[end, :], mask_seg[:, 1], mask_seg[:, end])
+	if (count(boarders_seg)[1] > (length(boarders_seg) / 2) )
+		mask_seg = .!mask_seg # invert the mask
+	end
+end
+
+# ╔═╡ 8b971093-7bfb-45b8-99e7-d6d83e9eb927
+mosaicview(filtered, Gray.(mask_seg); nrow=1)
+
+# ╔═╡ b09e2368-d666-40ba-ba60-53d07cdff0db
+labels = label_components(mask_seg, strel_box((3, 3))) # label connected components C8
+
+# ╔═╡ 09a8a6f6-20ba-4466-bb2f-46d1b98fb94d
+function largest_component(labels)
+	maximum(labels) == 0 && return falses(size(labels))
+	sizes = component_lengths(labels)
+	return labels .== argmax(sizes[1:end])
+end
+
+# ╔═╡ bbc43d93-740e-47d3-a25b-cb087fe4442c
+obj = largest_component(labels)
+
+# ╔═╡ 145c34ea-d02d-401e-85d6-8b3f03830170
+let
+	tint = RGB.(max.(g, 0.7 .* obj), g, g)
+	mosaicview(RGB.(Gray.(mask_seg)), RGB.(Gray.(obj)), tint; nrow=1, npad=6, fillvalue=1)
+end
+
+# ╔═╡ 9551cc52-203c-4efb-b470-5936b2b1bda2
+[file => let g = Float64.(Gray.(load(joinpath(data_dir, file))))
+            f = median_filter(g, K)
+            T, h = intermeans_threshold(f)
+            labels = label_components(f .> T)
+            (T = round(T, digits = 3), iters = length(h) - 1,
+             ncomp = maximum(labels), area = count(largest_component(labels)))
+        end
+ for file in image_files]
+
 # ╔═╡ Cell order:
 # ╠═5dafaf16-ce2a-11f1-9500-1729d89884be
 # ╠═f3d0f210-f2c0-4733-8a61-4cf443cd2366
 # ╠═29b912c5-050e-428c-b43b-f4d0cb864ee8
+# ╠═75e4bccb-2f58-4072-8f31-ac6fcdbdd7bd
+# ╠═55c736b6-4c8f-4b2f-9f03-e8ea13069ee1
 # ╠═7150a515-01ea-4d3a-a14c-fbfc203a2796
 # ╠═12a81b46-569b-4957-90c0-e7619529ac15
 # ╠═0395677b-0591-4355-839d-3e77073ada88
@@ -282,3 +394,19 @@ Gray.(clamp01.(mosaicview([zoom(out[6:18, 14:110], 4) for out in last.(results)]
 # ╠═8f9e7533-f50a-4d1f-9148-13d79d471d27
 # ╠═90a6d830-e5c5-4ad4-bf92-07ed61054f64
 # ╠═833568c1-ffb8-4aba-8d0d-99658b638ae9
+# ╠═59dca33c-874a-4c96-9aff-5fc1f1c447a7
+# ╠═e119d917-8156-4654-b265-f905622d18fa
+# ╠═458121a4-af60-4a29-9aa2-cff024749d8b
+# ╠═1e5d0cc0-6b47-40a2-9059-07df3e5c1da2
+# ╠═6d88a013-dd93-4209-99af-e64c83a4c83a
+# ╠═d3f302d4-6569-4835-8457-3ee20c5d3d7c
+# ╠═ae2907c2-806a-4940-8f58-72c44316c1db
+# ╠═cfa29cf0-7962-477e-a24b-0f579dd91acd
+# ╠═a8781fa6-8059-4f07-bc5a-82fe3625e376
+# ╠═8b971093-7bfb-45b8-99e7-d6d83e9eb927
+# ╠═26b3d671-8171-43dc-9463-b1aac2eb63ab
+# ╠═b09e2368-d666-40ba-ba60-53d07cdff0db
+# ╠═09a8a6f6-20ba-4466-bb2f-46d1b98fb94d
+# ╠═bbc43d93-740e-47d3-a25b-cb087fe4442c
+# ╠═145c34ea-d02d-401e-85d6-8b3f03830170
+# ╠═9551cc52-203c-4efb-b470-5936b2b1bda2
