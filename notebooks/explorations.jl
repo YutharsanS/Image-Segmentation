@@ -294,8 +294,78 @@ function intermeans_threshold(f; T0 = mean(f), ϵ= 1e-4, maxiter=100)
 	return T, history
 end
 
+# ╔═╡ 9e1b13bc-2d08-40fc-831e-64385f0e1775
+function background_threshold(f; k = 5, border = 10, σmin = 0.01)
+	H, W = size(f)
+
+	# collect border pixels
+	b = vcat(vec(f[1: border, :]), vec(f[H-border+1:H, :]), vec(f[:, 1:border]), vec(f[:, W-border+1:border]))
+	μ = median(b)
+	σ = 1.4826 * median(abs.(b .- μ))
+	return μ + k * max(σ, σmin), μ, σ
+end
+
+# ╔═╡ a8781fa6-8059-4f07-bc5a-82fe3625e376
+# convergence over multiple values
+[T0 => round.(intermeans_threshold(filtered; T0=T0)[2], digits=4) for T0 in (0.1, 0.5, 0.9)]
+
+# ╔═╡ 09a8a6f6-20ba-4466-bb2f-46d1b98fb94d
+function largest_component(labels)
+	maximum(labels) == 0 && return falses(size(labels))
+	sizes = component_lengths(labels)
+	return labels .== argmax(sizes[1:end])
+end
+
+# ╔═╡ 9551cc52-203c-4efb-b470-5936b2b1bda2
+[file => let g = Float64.(Gray.(load(joinpath(data_dir, file))))
+            f = median_filter(g, K)
+            T, h = intermeans_threshold(f)
+            labels = label_components(f .> T)
+            (T = round(T, digits = 3), iters = length(h) - 1,
+             ncomp = maximum(labels), area = count(largest_component(labels)))
+        end
+ for file in image_files]
+
+# ╔═╡ d9a5f34f-e1a8-41c2-92d0-9df40346c0db
+md"k $(@bind kσ Slider(2:1:15, default = 5, show_value = true))"
+
+# ╔═╡ 2ab11992-2119-44d6-90f9-a097d6115917
+let
+	Tim, _ = intermeans_threshold(filtered)
+	Tbg, μ, σ = background_threshold(filtered; k = kσ)
+	a = largest_component(label_components(filtered .> Tim))
+	b = largest_component(label_components(filtered .> Tbg))
+	md"""
+	inter-means T = $(round(Tim, digits = 3)) · background T = $(round(Tbg, digits = 3)) (μ = $(round(μ, digits = 3)), σ = $(round(σ, digits = 3)))
+
+	$(mosaicview(Gray.(a), Gray.(b); nrow = 1, npad = 6, fillvalue = 1))
+	"""
+end
+
+# ╔═╡ 85ea43ef-391e-4974-9cb9-057823f2cde1
+area_curve(f, Ts) = [count(largest_component(label_components(f .> T))) for T in Ts]
+
+# ╔═╡ 62587e2f-e4f3-46ae-b194-a6d3fca31266
+let
+	Ts = 0.02:0.01:0.90
+	A = @time area_curve(filtered, Ts)
+	Tim, _ = intermeans_threshold(filtered)
+	plot(Ts, A, yscale = :log10, marker = :circle, ms = 2, legend = false,
+	     xlabel = "threshold T", ylabel = "largest-component area")
+	vline!([Tim])
+end
+
+# ╔═╡ 62dc8977-4643-4316-a4fb-b3042acc0eb2
+function segment_threshold(f; σ_cut = 0.05, k = 5)
+	Tbg, μ, σ = background_threshold(f; k = k)
+	σ < σ_cut && return Tbg, :background
+	Tim, _ = intermeans_threshold(f)
+	return Tim, :intermeans
+end
+
 # ╔═╡ cfa29cf0-7962-477e-a24b-0f579dd91acd
-T, hist_T = intermeans_threshold(filtered)
+# T, hist_T = intermeans_threshold(filtered)
+T, _ = segment_threshold(filtered)
 
 # ╔═╡ 1e5d0cc0-6b47-40a2-9059-07df3e5c1da2
 let
@@ -305,10 +375,6 @@ let
 	vline!([T], lw=2, label="Threshold")
 	
 end
-
-# ╔═╡ a8781fa6-8059-4f07-bc5a-82fe3625e376
-# convergence over multiple values
-[T0 => round.(intermeans_threshold(filtered; T0=T0)[2], digits=4) for T0 in (0.1, 0.5, 0.9)]
 
 # ╔═╡ 26b3d671-8171-43dc-9463-b1aac2eb63ab
 # if  more than half the boarder pixels are white, then the background is white : assumption
@@ -328,13 +394,6 @@ mosaicview(filtered, Gray.(mask_seg); nrow=1)
 # ╔═╡ b09e2368-d666-40ba-ba60-53d07cdff0db
 labels = label_components(mask_seg, strel_box((3, 3))) # label connected components C8
 
-# ╔═╡ 09a8a6f6-20ba-4466-bb2f-46d1b98fb94d
-function largest_component(labels)
-	maximum(labels) == 0 && return falses(size(labels))
-	sizes = component_lengths(labels)
-	return labels .== argmax(sizes[1:end])
-end
-
 # ╔═╡ bbc43d93-740e-47d3-a25b-cb087fe4442c
 obj = largest_component(labels)
 
@@ -344,15 +403,8 @@ let
 	mosaicview(RGB.(Gray.(mask_seg)), RGB.(Gray.(obj)), tint; nrow=1, npad=6, fillvalue=1)
 end
 
-# ╔═╡ 9551cc52-203c-4efb-b470-5936b2b1bda2
-[file => let g = Float64.(Gray.(load(joinpath(data_dir, file))))
-            f = median_filter(g, K)
-            T, h = intermeans_threshold(f)
-            labels = label_components(f .> T)
-            (T = round(T, digits = 3), iters = length(h) - 1,
-             ncomp = maximum(labels), area = count(largest_component(labels)))
-        end
- for file in image_files]
+# ╔═╡ f7349d08-ccb7-4791-86c9-664363b19966
+
 
 # ╔═╡ Cell order:
 # ╠═5dafaf16-ce2a-11f1-9500-1729d89884be
@@ -401,6 +453,7 @@ end
 # ╠═6d88a013-dd93-4209-99af-e64c83a4c83a
 # ╠═d3f302d4-6569-4835-8457-3ee20c5d3d7c
 # ╠═ae2907c2-806a-4940-8f58-72c44316c1db
+# ╠═9e1b13bc-2d08-40fc-831e-64385f0e1775
 # ╠═cfa29cf0-7962-477e-a24b-0f579dd91acd
 # ╠═a8781fa6-8059-4f07-bc5a-82fe3625e376
 # ╠═8b971093-7bfb-45b8-99e7-d6d83e9eb927
@@ -410,3 +463,9 @@ end
 # ╠═bbc43d93-740e-47d3-a25b-cb087fe4442c
 # ╠═145c34ea-d02d-401e-85d6-8b3f03830170
 # ╠═9551cc52-203c-4efb-b470-5936b2b1bda2
+# ╠═d9a5f34f-e1a8-41c2-92d0-9df40346c0db
+# ╠═2ab11992-2119-44d6-90f9-a097d6115917
+# ╠═85ea43ef-391e-4974-9cb9-057823f2cde1
+# ╠═62587e2f-e4f3-46ae-b194-a6d3fca31266
+# ╠═62dc8977-4643-4316-a4fb-b3042acc0eb2
+# ╠═f7349d08-ccb7-4791-86c9-664363b19966
