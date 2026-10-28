@@ -1,0 +1,32 @@
+# Julia
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+*.jl.*.mem
+/coverage/
+lcov.info
+/docs/build/
+/docs/Manifest.toml
+.CondaPkg/
+# Manifest.toml is committed on purpose: it pins exact package versions for reproducibility
+
+# Pluto
+# backups Pluto writes when a notebook changes on disk, e.g. "explorations backup 1.jl"
+*backup*.jl
+.ipynb_checkpoints/
+
+# Generated outputs
+/output/
+/outputs/
+/results/
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
